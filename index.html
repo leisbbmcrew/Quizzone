@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="it"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Quiz</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#fbf6ee;--card:#fff;--tx:#25302a;--mu:#6b7a70;--red:#b3262e;--grn:#1f6b45;--bd:#e4dccd}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#16201b;--card:#1f2c25;--tx:#f1ece0;--mu:#9fb0a5;--red:#e0545c;--grn:#4cb583;--bd:#33463b}}
+:root[data-theme="dark"]{--bg:#16201b;--card:#1f2c25;--tx:#f1ece0;--mu:#9fb0a5;--red:#e0545c;--grn:#4cb583;--bd:#33463b}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:640px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:0 0 4px}h2{font-size:17px;margin:20px 0 8px}
+.mu{color:var(--mu);font-size:14px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin:10px 0}
+button,input,textarea,select{font:inherit;color:inherit}
+input,textarea,select{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);margin:4px 0}
+button{padding:11px 14px;border:0;border-radius:10px;background:var(--red);color:#fff;font-weight:600;cursor:pointer}
+button.g{background:var(--grn)}button.s{background:transparent;color:var(--red);border:1px solid var(--red)}
+button:disabled{opacity:.5}
+.opt{display:block;width:100%;text-align:left;margin:8px 0;background:var(--card);color:var(--tx);border:2px solid var(--bd)}
+.opt.sel{border-color:var(--red)}.opt.ok{border-color:var(--grn);background:color-mix(in srgb,var(--grn) 18%,var(--card))}.opt.ko{border-color:var(--red)}
+.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1}
+.timer{font-size:34px;font-weight:700;text-align:center;color:var(--red)}
+.wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:14px}th,td{padding:6px 8px;border-bottom:1px solid var(--bd);text-align:left;white-space:nowrap}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}.tabs button{background:var(--card);color:var(--tx);border:1px solid var(--bd)}.tabs button.on{background:var(--red);color:#fff}
+.snow{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:0}
+.snow i{position:absolute;top:-24px;font-style:normal;opacity:.5;animation:fall linear infinite}
+@keyframes fall{to{transform:translateY(112vh) rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.snow{display:none}}
+body{background:radial-gradient(900px 360px at 50% -120px,color-mix(in srgb,var(--red) 16%,transparent),transparent),var(--bg)}
+main{position:relative;z-index:1}h1{text-align:center}
+.pod{display:flex;align-items:flex-end;justify-content:center;gap:8px;margin:12px 0}
+.pod>div{flex:1;text-align:center;border-radius:12px 12px 0 0;padding:10px 4px;background:var(--card);border:1px solid var(--bd)}
+.pod .p1{min-height:150px;border-color:#d4a017}.pod .p2{min-height:115px}.pod .p3{min-height:90px}
+.pod b{display:block;overflow-wrap:anywhere}
+main.wide{max-width:1200px}.proj h1{display:none}.proj h2{font-size:clamp(26px,5vw,60px)}
+.proj .opt{font-size:clamp(18px,3vw,36px);padding:16px}.proj .timer{font-size:clamp(40px,8vw,110px)}
+.proj table{font-size:clamp(16px,2.4vw,30px)}.proj .card{font-size:clamp(16px,2.4vw,28px)}
+</style></head><body><div class="snow" id="snow"></div><main>
+<h1>❓ Quiz</h1>
+<div id="app" class="mu">Caricamento…</div>
+</main>
+<script type="module">
+import {firebaseConfig} from './firebase-config.js';
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import {getFirestore,doc as fDoc,collection as fCol,getDoc,setDoc,updateDoc,deleteDoc,onSnapshot as fSnap,query,orderBy as fOrd,addDoc} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import {getAuth,signInAnonymously} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+(async()=>{
+const $=s=>document.querySelector(s), app=$('#app');
+const esc=t=>String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let uid=null,isAdmin=false,dl=null,proj=false,editId=null;
+const ls={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}}};
+let fdb,auth;
+try{if(String(firebaseConfig.apiKey).startsWith('INCOLLA'))throw 0;const fa=initializeApp(firebaseConfig);fdb=getFirestore(fa);auth=getAuth(fa);await signInAnonymously(auth);uid=auth.currentUser.uid}
+catch(e){app.innerHTML='<div class="card">Configurazione Firebase mancante o non valida. Controlla firebase-config.js e che il login anonimo sia attivo.</div>';return}
+const rd=s=>({data:()=>s.exists()?s.data():undefined});
+const mkDoc=p=>({get:async()=>rd(await getDoc(fDoc(fdb,p))),set:d=>setDoc(fDoc(fdb,p),d),update:d=>updateDoc(fDoc(fdb,p),d),delete:()=>deleteDoc(fDoc(fdb,p)),onSnapshot:(n,e)=>fSnap(fDoc(fdb,p),s=>n(rd(s)),e)});
+const mkCol=(p,ob)=>({orderBy:f=>mkCol(p,f),add:async d=>({id:(await addDoc(fCol(fdb,p),d)).id}),onSnapshot:(n,e)=>fSnap(ob?query(fCol(fdb,p),fOrd(ob)):fCol(fdb,p),s=>n({docs:s.docs.map(d=>({id:d.id,data:()=>d.data()}))}),e)});
+const db={doc:mkDoc,collection:p=>mkCol(p)};
+dl=true;
+isAdmin=ls.get('qadm')==='1';
+if(isAdmin){try{const sn=await getDoc(fDoc(fdb,'admins/'+uid));if(!sn.exists())throw 0}catch(e){isAdmin=false;ls.set('qadm',null)}}
+const P=s=>s.docs?s.docs.map(d=>({id:d.id,...d.data()})):[];
+let ft='mc',endedKey='',loaded=false,mode='singolo',nick='',err='',tab='live',sel=null,now=Date.now(),rooms=[],qs=[],players=[],me=null,claimed=false,first=true;
+const key=n=>n.toLowerCase().replace(/[^a-z0-9]/g,'')||'x';
+const meRef=db.doc('players/'+uid);
+const S=()=>rooms.find(r=>r.id===(isAdmin?sel:(me&&me.room)));
+const THEMES={
+ neutro:{n:'Neutro',e:'❓',t:'Quiz',p:'#2f5d8a',a:'#1f8a70',pd:'#6fa8dc',ad:'#4cb59a',bg:'#f4f6f8',bgd:'#151b22',pt:'',end:'🏆 Complimenti!'},
+ natale:{n:'Natale',e:'🎄',t:'Quizzone Natalizio',p:'#b3262e',a:'#1f6b45',pd:'#e0545c',ad:'#4cb583',bg:'#fbf6ee',bgd:'#16201b',pt:'❄',end:'🎄 Buon Natale! 🎁'},
+ pasqua:{n:'Pasqua',e:'🐣',t:'Quiz di Pasqua',p:'#8e5bb5',a:'#3f9b5a',pd:'#c39bea',ad:'#6fcf8a',bg:'#fbf8ee',bgd:'#1d1b24',pt:'🌸',end:'🐣 Buona Pasqua! 🥚'},
+ halloween:{n:'Halloween',e:'🎃',t:'Halloween Quiz',p:'#d9650d',a:'#6a4c93',pd:'#ff9a3c',ad:'#b08ee0',bg:'#fbf3ea',bgd:'#17131c',pt:'🦇',end:'🎃 Buon Halloween! 👻'},
+ carnevale:{n:'Carnevale',e:'🎭',t:'Quiz di Carnevale',p:'#d6336c',a:'#1c7ed6',pd:'#f783ac',ad:'#74c0fc',bg:'#fcf3f7',bgd:'#1a1620',pt:'🎊',end:'🎭 Buon Carnevale! 🎉'},
+ estate:{n:'Estate',e:'☀️',t:"Quiz dell'Estate",p:'#e8890c',a:'#0b8ea6',pd:'#ffb347',ad:'#4fd1e0',bg:'#fffaf0',bgd:'#14201f',pt:'☀️',end:'☀️ Buona estate! 🍦'},
+ compleanno:{n:'Compleanno',e:'🎂',t:'Quiz di Compleanno',p:'#e0457b',a:'#7048e8',pd:'#ff85b0',ad:'#a58bff',bg:'#fff5f8',bgd:'#1b1620',pt:'🎈',end:'🎂 Buon compleanno! 🎈'},
+ capodanno:{n:'Capodanno',e:'🎆',t:'Quiz di Capodanno',p:'#b8860b',a:'#3b5bdb',pd:'#f0c64a',ad:'#8ea2ff',bg:'#f8f6ee',bgd:'#13151f',pt:'✨',end:'🎆 Buon anno! 🥂'}
+};
+let th=null;
+const TH=()=>{const id=(th&&THEMES[th.id])?th.id:'neutro';return {id,...THEMES[id],title:(th&&th.title)||THEMES[id].t}};
+function applyTheme(){const T=TH();let st=document.getElementById('th');if(!st){st=document.createElement('style');st.id='th';document.head.appendChild(st)}
+ st.textContent=`:root{--red:${T.p};--grn:${T.a};--bg:${T.bg}}@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--red:${T.pd};--grn:${T.ad};--bg:${T.bgd}}}:root[data-theme="dark"]{--red:${T.pd};--grn:${T.ad};--bg:${T.bgd}}`;
+ document.title=T.title;const h=document.querySelector('h1');if(h)h.textContent=T.e+' '+T.title;
+ const sn=document.getElementById('snow');if(sn){sn.innerHTML='';if(T.pt)for(let i=0;i<14;i++){const e=document.createElement('i');e.textContent=T.pt;e.style.cssText=`left:${Math.random()*100}%;font-size:${10+Math.random()*14}px;animation-duration:${9+Math.random()*12}s;animation-delay:-${Math.random()*15}s`;sn.appendChild(e)}}}
+db.doc('settings/theme').onSnapshot(s=>{th=(s.data&&s.data())||null;applyTheme();render()},()=>{});
+db.collection('rooms').orderBy('createdAt').onSnapshot(s=>{rooms=P(s);render()},()=>{});
+db.collection('questions').orderBy('order').onSnapshot(s=>{qs=P(s);render()},()=>{});
+db.collection('players').onSnapshot(s=>{players=P(s);me=players.find(p=>p.id===uid)||null;loaded=true;
+ if(first){first=false;if(me&&!isAdmin)claim(me.name).then(ok=>{claimed=ok;if(!ok){err='Il nome "'+me.name+'" è già usato da un altro giocatore connesso.';meRef.delete().catch(()=>{})}render()});}
+ render()},()=>{});
+setInterval(()=>{now=Date.now();const R=S();if(R&&R.phase==='question')tick()},500);
+setInterval(()=>{if(me&&claimed&&!isAdmin)db.doc('names/'+key(me.name)).set({uid,seen:Date.now(),name:me.name}).catch(()=>{})},15000);
+document.addEventListener('focusout',()=>setTimeout(render,500));
+
+async function claim(n){const r=db.doc('names/'+key(n));let d=null;try{const s=await r.get();d=s.data&&s.data()}catch(e){}
+ if(d&&d.uid!==uid&&Date.now()-d.seen<45000)return false;
+ try{await r.set({uid,seen:Date.now(),name:n})}catch(e){}return true}
+const norm=t=>String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+const canon=t=>String(t||'').replace(/\s*[–—\/]\s*|\s+-\s+/g,'|').split('|').map(norm).filter(Boolean).sort().join('|');
+const matchQ=(x,t)=>!!norm(t)&&(x.answers||[]).some(v=>canon(v)===canon(t)||norm(v)===norm(t));
+const okOf=(q,a)=>(q.type==='open'||q.type==='clues')?matchQ(q,a.c):a.c===q.correct;
+const qLimit=x=>x.type==='clues'?x.clues.length*(x.clueSecs||15):(x.limit||20);
+function ptsOf(q,a){if(q.type==='clues'){const n=q.clues.length;return Math.round((q.pts||n)*(n-Math.min(a.k||0,n-1))/n)}
+if(q.sp===false)return q.pts||1000;
+ const lim=qLimit(q)*1000;return Math.round((q.pts||1000)*(1-0.5*Math.min(a.ms,lim)/lim))}
+function clueHtml(R,x,rev){const n=x.clues.length,cs=x.clueSecs||15,el=Math.max(0,now-R.startedAt)/1000,k=Math.min(n-1,Math.floor(el/cs)),sh=rev?n:k+1;
+ let h=x.clues.slice(0,sh).map((c,i)=>`<div style="margin:6px 0;padding:10px;border:1px solid var(--bd);border-radius:10px">🔎 <b>Indizio ${i+1}:</b> ${esc(c)}</div>`).join('');
+ if(!rev)h+=`<div class="mu">Valgono ora <b>${Math.round((x.pts||n)*(n-k)/n)}</b> punti${k<n-1?` · prossimo indizio tra ${Math.ceil(cs*(k+1)-el)}s`:' · ultimo indizio'}</div>`;
+ return h}
+function score(p){let pts=0,ms=0,ok=0;qs.forEach(q=>{const a=p.answers&&p.answers[q.id];if(!a)return;if(okOf(q,a)){pts+=ptsOf(q,a);ms+=a.ms;ok++}else pts-=(q.neg||0)});return{pts,ms,ok}}
+const rank=list=>list.map(p=>({id:p.id,name:p.name+(p.mode==='gruppo'?' 👥':''),...score(p)})).sort((a,b)=>b.pts-a.pts||a.ms-b.ms);
+function podiumHtml(list){const b=rank(list);if(!b.length)return '';const m=['🥇','🥈','🥉'],c=(i,k)=>b[i]?`<div class="${k}"><div style="font-size:28px">${m[i]}</div><b>${esc(b[i].name)}</b><span class="mu">${b[i].pts} pt</span></div>`:'';
+ return `<div class="card" style="text-align:center"><h2 style="margin-top:0">${esc(TH().end)}</h2><div class="mu">Complimenti a ${esc(b[0].name)} e a tutti i partecipanti!</div><div class="pod">${c(1,'p2')}${c(0,'p1')}${c(2,'p3')}</div></div>`}
+function csv(R){const rs=R?[R]:rooms,rows=[['Stanza','Posizione','Nome','Punti','Giuste','Tempo totale (s)'],...rs.flatMap(rm=>rank(players.filter(p=>p.room===rm.id)).map((x,i)=>[rm.name,i+1,x.name,x.pts,x.ok,(x.ms/1000).toFixed(1)]))];
+ return '\ufeff'+rows.map(z=>z.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(';')).join('\n')}
+async function saveCsv(R){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv(R)],{type:'text/csv;charset=utf-8'}));a.download='quiz-'+(R?R.name:'tutte-le-stanze').replace(/[^\w-]+/g,'_')+'.csv';document.body.appendChild(a);a.click();a.remove()}
+function boardHtml(list,R){const tot=R?roomQs(R).length:qs.length;const b=rank(list);
+ if(!b.length)return '<p class="mu">Nessun partecipante.</p>';
+ return '<div class="wrap"><table><tr><th>#</th><th>Nome</th><th>Punti</th><th>Giuste</th><th>Tempo tot.</th></tr>'+b.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td><td>${r.pts}</td><td>${r.ok}/${tot}</td><td>${(r.ms/1000).toFixed(1)}s</td></tr>`).join('')+'</table></div>'}
+const left=(R,x)=>Math.max(0,(x?qLimit(x):20)-(now-R.startedAt)/1000);
+function hash(s){let h=2166136261;for(const c of s){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0}
+function rng(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function inSpec(sp,n){sp=String(sp||'all').toLowerCase().trim();if(sp==='all'||sp==='')return true;if(!n)return false;return sp.split(',').some(t=>{const m=t.trim().match(/^(\d+)(?:\s*-\s*(\d+))?$/);return m&&n>=+m[1]&&n<=+(m[2]||m[1])})}
+function normSpec(t){t=String(t||'').toLowerCase().trim();if(!t||/^(tutt[eio]|all)$/.test(t))return 'all';return /^\d+(\s*-\s*\d+)?(\s*,\s*\d+(\s*-\s*\d+)?)*$/.test(t)?t.replace(/\s+/g,''):null}
+const BAD='Stanze non valide: scrivi "tutte" oppure numeri come 1,3-4';
+function roomQs(R){return qs.filter(q=>q.rs!=null?inSpec(q.rs,R.num):(q.room?q.room===R.id:true))}
+function qFor(R,p){const l=roomQs(R);if(R.ord!=='random'||!p)return l;const g=rng(hash(p.id+R.id)),a=l.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(g()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+const curQ=(R,p)=>qFor(R,p)[R.idx];
+function tick(){const R=S();if(!R||R.phase!=='question')return;const x=isAdmin?((tab==='g'||proj||R.ord!=='random')?curQ(R):null):curQ(R,me);if(!x)return;
+ const l=left(R,x),t=$('#tm');if(t)t.textContent=Math.ceil(l)+'s';
+ const c=$('#cl');if(c)c.innerHTML=clueHtml(R,x,false);
+ const k=R.id+'|'+R.idx+'|'+R.startedAt;if(l<=0&&(!isAdmin||tab==='g'||proj)&&endedKey!==k){endedKey=k;render(true)}}
+function cfg(R,ph){const o=R.ord==='random'?'random':'same';
+ if(ph!=='lobby')return `<div class="mu">Ordine: ${o==='random'?'casuale per ogni utente':'uguale per tutti'}</div>`;
+ return `<select id="od"><option value="same" ${o==='same'?'selected':''}>Stesso ordine per tutti</option><option value="random" ${o==='random'?'selected':''}>Ordine casuale per ogni utente</option></select>`}
+const PH={lobby:'In attesa',question:'In corso',reveal:'In corso',end:'Terminata'};
+
+async function answer(c){const R=S(),x=R&&curQ(R,me);if(!x||R.phase!=='question'||(me.answers&&me.answers[x.id]))return;
+ const ms=Math.max(0,Date.now()-R.startedAt);if(ms>((x.limit||20)*1000+1500))return;
+ const answers={...(me.answers||{}),[x.id]:{c,ms}};me={...me,answers};
+ try{await meRef.update({answers})}catch(e){alert('Risposta non registrata.')}render()}
+async function sendText(){const R=S(),x=R&&curQ(R,me),el=$('#ans');if(!x||!el||R.phase!=='question')return;const t=el.value.trim();if(!t)return;
+ const prev=me.answers&&me.answers[x.id];if(prev&&matchQ(x,prev.c))return;
+ const ms=Math.max(0,Date.now()-R.startedAt);if(ms>qLimit(x)*1000+1500)return;
+ const k=x.type==='clues'?Math.min(x.clues.length-1,Math.floor(ms/((x.clueSecs||15)*1000))):0;
+ const answers={...(me.answers||{}),[x.id]:{c:t,ms,k}};me={...me,answers};
+ try{await meRef.update({answers})}catch(e){alert('Risposta non registrata.')}render(true)}
+async function register(){const n=$('#nm').value.trim();if(!n)return;
+ if(mode==='singolo'&&/^\d{4,12}$/.test(n)){try{await setDoc(fDoc(fdb,'admins/'+uid),{pin:n});isAdmin=true;ls.set('qadm','1');nick='';err='';render();return}catch(e){}}
+ if(!(await claim(n))){err='Nome già in uso da un giocatore connesso. Scegline un altro.';nick=n;render();return}
+ err='';claimed=true;try{await meRef.set({name:n,mode,room:null,answers:{}})}catch(e){err='Impossibile registrarti: serve accesso Contributor.';render()}}
+async function leave(){if(me)await db.doc('names/'+key(me.name)).delete().catch(()=>{});await meRef.delete().catch(()=>{});claimed=false;nick='';render()}
+
+function startView(){return `<div class="card"><b>Come vuoi giocare?</b><div class="tabs"><button data-m="singolo" class="${mode==='singolo'?'on':''}">👤 Singolo</button><button data-m="gruppo" class="${mode==='gruppo'?'on':''}">👥 Gruppo</button></div><input id="nm" maxlength="24" value="${esc(nick)}" placeholder="${mode==='singolo'?'Il tuo nick':'Nome della squadra'}">${err?`<p style="color:var(--red)">${esc(err)}</p>`:''}<button id="go" style="width:100%;margin-top:6px">Continua</button></div>`}
+function pickView(){return `<div class="card row" style="align-items:center"><div><b>${esc(me.name)}</b>${me.mode==='gruppo'?' 👥':''}<div class="mu">Scegli la stanza di gioco</div></div><button class="s" id="lv" style="flex:0 0 auto">Esci</button></div>`+
+ (rooms.length?rooms.map(r=>`<div class="card"><b>${esc(r.name)}</b><div class="mu">${PH[r.phase]||''} · ${players.filter(p=>p.room===r.id).length} partecipanti</div><button data-r="${r.id}" ${r.phase==='end'?'disabled':''} style="width:100%;margin-top:8px">Entra</button></div>`).join(''):'<div class="card mu">Nessuna stanza disponibile: aspetta che l\'host ne crei una.</div>')}
+function playerView(R){
+ const ph=R.phase,x=curQ(R,me),list=players.filter(p=>p.room===R.id);
+ let h=`<div class="card row" style="align-items:center"><div><b>${esc(me.name)}</b>${me.mode==='gruppo'?' 👥':''}<div class="mu">Stanza: ${esc(R.name)}</div></div><button class="s" id="cr" style="flex:0 0 auto">Cambia stanza</button></div>`;
+ if(ph==='lobby')return h+'<div class="card">Aspetta che l\'host avvii la prima domanda…</div><div class="card"><b>In stanza</b>'+list.map(p=>'<div>'+esc(p.name)+'</div>').join('')+'</div>';
+ if(ph==='end')return h+podiumHtml(list)+'<div class="card"><b>Classifica finale</b>'+boardHtml(list,R)+'</div>';
+ if(!x)return h;
+ const a=me.answers&&me.answers[x.id],rev=ph==='reveal'||left(R,x)<=0;
+ h+=`<div class="card"><div class="mu">Domanda ${R.idx+1} di ${qFor(R,me).length}</div><h2 style="margin-top:4px">${esc(x.text)}</h2>`;
+ if(!rev)h+=`<div class="timer" id="tm">${Math.ceil(left(R,x))}s</div>`;
+ if(!x.type||x.type==='mc'){
+  x.options.forEach((o,i)=>{const cls=rev?(i===x.correct?'ok':(a&&a.c===i?'ko':'')):(a&&a.c===i?'sel':'');
+   h+=`<button class="opt ${cls}" data-c="${i}" ${(a||rev)?'disabled':''}>${esc(o)}</button>`});
+  if(a&&!rev)h+='<p class="mu">Risposta registrata ✔ Aspetta gli altri…</p>';
+  if(rev)h+=`<p><b>${a?(a.c===x.correct?'✅ Giusto! +'+ptsOf(x,a):'❌ Sbagliato'+(x.neg?' −'+x.neg:'')):'⏱ Tempo scaduto'}</b></p>`;
+ }else{
+  const okA=a&&matchQ(x,a.c);
+  if(x.type==='clues')h+=`<div id="cl">${clueHtml(R,x,rev)}</div>`;
+  if(!rev&&!okA)h+=`<input id="ans" maxlength="80" placeholder="La tua risposta" autocomplete="off"><button id="sb" style="width:100%;margin-top:6px">Invia</button>`;
+  if(a&&!okA&&!rev)h+='<p>❌ Non è corretta, riprova!</p>';
+  if(okA)h+=`<p><b>✅ Esatto! +${ptsOf(x,a)} punti</b></p>`;
+  else if(rev)h+=`<p><b>${a?'❌ Non indovinata'+(x.neg?' −'+x.neg:''):'⏱ Tempo scaduto'}</b></p>`;
+  if(rev)h+=`<p class="mu">Risposta: <b>${esc((x.answers||[])[0]||'')}</b></p>`;
+ }
+ return h+'</div><div class="card"><b>Classifica</b>'+boardHtml(list,R)+'</div>'}
+
+const setRoom=o=>db.doc('rooms/'+sel).update(o);
+const addQ=async o=>{await db.collection('questions').add({...o,order:Date.now()+Math.random()})};
+function detail(list,R){const rq=roomQs(R);if(!rq.length||!list.length)return '';
+ return '<div class="card wrap"><b>Tempi per domanda</b><table><tr><th>Nome</th>'+rq.map((_,i)=>`<th>D${i+1}</th>`).join('')+'</tr>'+
+ list.map(p=>`<tr><td>${esc(p.name)}</td>`+rq.map(x=>{const a=p.answers&&p.answers[x.id];return `<td>${a?(okOf(x,a)?'✔ ':'✘ ')+(a.ms/1000).toFixed(1)+'s':'—'}</td>`}).join('')+'</tr>').join('')+'</table></div>'}
+function guestPreview(R,list,big){
+ const ph=R.phase,rq=roomQs(R),x=rq[R.idx],rnd=R.ord==='random';
+ let h=big?`<div class="row" style="align-items:center"><div class="mu">${TH().e} ${esc(TH().title)} · ${esc(R.name)}</div><button class="s" id="px" style="flex:0 0 auto">✕ Chiudi</button></div>`
+  :`<div class="card"><b>Anteprima: cosa vedono i guest</b><div class="mu">Stanza #${R.num||'–'} ${esc(R.name)}${rnd?' · ordine casuale: ognuno ha un ordine diverso, qui vedi l\'ordine base':''}</div></div>`;
+ if(ph==='lobby')return h+(big?`<div class="card" style="text-align:center"><h2>Entra anche tu!</h2>Scegli la stanza <b>${esc(R.name)}</b></div>`:'<div class="card">Aspetta che l\'host avvii la prima domanda…</div>')+`<div class="card"><b>In stanza (${list.length})</b><div>${list.map(p=>esc(p.name)).join(' · ')||'—'}</div></div>`;
+ if(ph==='end')return h+podiumHtml(list)+'<div class="card"><b>Classifica finale</b>'+boardHtml(list,R)+'</div>';
+ if(big&&rnd)return h+`<div class="card" style="text-align:center"><h2>Domanda ${R.idx+1} di ${rq.length}</h2><div class="mu">Ognuno ha le domande in ordine diverso</div></div><div class="card"><b>Classifica</b>${boardHtml(list,R)}</div>`;
+ if(!x)return h;
+ const rev=ph==='reveal'||left(R,x)<=0;
+ h+=`<div class="card"><div class="mu">Domanda ${R.idx+1} di ${rq.length}</div><h2 style="margin-top:4px">${esc(x.text)}</h2>`;
+ if(!rev)h+=`<div class="timer" id="tm">${Math.ceil(left(R,x))}s</div>`;
+ if(!x.type||x.type==='mc')x.options.forEach((o,i)=>{h+=`<button class="opt ${rev&&i===x.correct?'ok':''}" disabled>${esc(o)}</button>`});
+ else{if(x.type==='clues')h+=`<div id="cl">${clueHtml(R,x,rev)}</div>`;
+  if(!rev)h+='<input disabled placeholder="La tua risposta"><button disabled style="width:100%;margin-top:6px">Invia</button>';
+  else h+=`<p class="mu">Risposta: <b>${esc((x.answers||[])[0]||'')}</b></p>`}
+ if(big){const n=list.filter(p=>{const q=curQ(R,p);return q&&p.answers&&p.answers[q.id]}).length;h+=`<div class="mu">Risposte: ${n}/${list.length}</div>`}
+ return h+'</div><div class="card"><b>Classifica</b>'+boardHtml(list,R)+'</div>'}
+function adminView(){
+ const R=S(),list=R?players.filter(p=>p.room===R.id):[];
+ const tabs=`<div class="tabs"><button data-t="live" class="${tab==='live'?'on':''}">Stanze</button><button data-t="q" class="${tab==='q'?'on':''}">Domande (${qs.length})</button><button data-t="p" class="${tab==='p'?'on':''}">Punteggi</button><button data-t="pl" class="${tab==='pl'?'on':''}">Giocatori</button><button data-t="g" class="${tab==='g'?'on':''}">Vista guest</button><button data-t="th" class="${tab==='th'?'on':''}">🎨 Temi</button><button id="pj" style="flex:0 0 auto">📺 Proiettore</button><button data-t="x" style="flex:0 0 auto">Esci</button></div>`;
+ const roomPick=`<div class="card"><b>Stanza:</b> ${rooms.length?rooms.map(r=>`<button data-sel="${r.id}" class="${sel===r.id?'':'s'}" style="margin:2px">#${r.num||'–'} ${esc(r.name)}</button>`).join(''):'<span class="mu">nessuna</span>'}</div>`;
+ if(tab==='g')return tabs+roomPick+(R?guestPreview(R,list):'<div class="card mu">Seleziona una stanza.</div>');
+ if(tab==='th'){const T=TH();return tabs+`<div class="card"><b>Tema</b><div class="mu">Cambia colori, nome e messaggio finale per tutti.</div><div class="row" style="margin-top:8px">${Object.entries(THEMES).map(([k,v])=>`<button data-th="${k}" class="${T.id===k?'':'s'}" style="flex:1 1 40%">${v.e} ${v.n}</button>`).join('')}</div></div><div class="card"><b>Nome del quiz</b><input id="tt" maxlength="40" value="${esc(T.title)}"><div class="row"><button id="tts" class="g">Salva nome</button><button id="ttr" class="s">Ripristina nome del tema</button></div></div>`}
+ if(tab==='pl')return tabs+`<div class="card"><b>Giocatori (${players.length})</b></div>`+(players.map(p=>{const rm=rooms.find(z=>z.id===p.room);return `<div class="card"><b>${esc(p.name)}</b>${p.mode==='gruppo'?' 👥':''}<div class="mu">${rm?'Stanza #'+(rm.num||'–')+' '+esc(rm.name):'Nessuna stanza'}</div><div class="row"><button class="s" data-rn="${p.id}">Rinomina</button><button class="s" data-kick="${p.id}">Rimuovi</button></div></div>`}).join('')||'<div class="card mu">Nessun giocatore.</div>');
+ if(tab==='p')return tabs+roomPick+(dl?'<div class="card row"><button id="dl1" class="g">⬇ CSV stanza</button><button id="dl2" class="s">⬇ CSV tutte le stanze</button></div>':'')+(R?`<div class="card"><b>${esc(R.name)}</b>${boardHtml(list,R)}</div>`+detail(list,R):'');
+ if(tab==='q')return tabs+`<div class="card mu">Stanze: ${rooms.map(r=>'#'+(r.num||'–')+' '+esc(r.name)).join(' · ')||'nessuna'}. Per ogni domanda indica le stanze come nella stampa: "tutte" oppure es. 1,3-4.</div><div class="card"><b>Nuova domanda</b>
+ <select id="ty"><option value="mc" ${ft==='mc'?'selected':''}>Risposta multipla</option><option value="open" ${ft==='open'?'selected':''}>Domanda aperta</option><option value="clues" ${ft==='clues'?'selected':''}>Indovina con indizi</option></select>
+ <input id="qt" placeholder="${ft==='clues'?'Titolo (es. INDOVINA LA CANZONE)':'Testo domanda'}">
+ ${ft==='mc'?[0,1,2,3].map(i=>`<div class="row" style="align-items:center"><input id="o${i}" placeholder="Risposta ${'ABCD'[i]}"><label style="flex:0 0 auto"><input type="radio" name="cr" value="${i}" ${i===0?'checked':''} style="width:auto"> corretta</label></div>`).join(''):`<textarea id="va" rows="3" placeholder="Risposte valide, una per riga (es. Selly - Vasco)"></textarea><div class="mu">Maiuscole, accenti e punteggiatura sono ignorati. Con "A - B" è accettato anche "B - A". Altre varianti (es. nome completo) vanno su righe separate.</div>`}
+ ${ft==='clues'?`<textarea id="cls" rows="4" placeholder="Indizi in ordine, uno per riga"></textarea><input id="cs" type="number" value="15" min="3" placeholder="Secondi per ogni indizio">`:`<input id="ql" type="number" value="20" min="5" max="300" placeholder="Secondi">`}
+ <div class="row"><div><div class="mu">Punti aggiunti se esatta</div><input id="pts" type="number" min="1" placeholder="${ft==='clues'?'vuoto = 1 per indizio':'vuoto = 1000'}"></div><div><div class="mu">Punti tolti se sbagliata</div><input id="neg" type="number" min="0" placeholder="vuoto = 0"></div></div>
+ ${ft==='clues'?'':'<label class="mu"><input type="checkbox" id="sp" checked style="width:auto"> Bonus velocità (più veloce = più punti, fino al doppio in meno)</label>'}
+ <input id="hn" placeholder="Nota per l'host, non visibile ai guest (es. metti su Albachiara)"><input id="rs0" value="tutte" placeholder="Stanze: tutte oppure 1,3-4">
+ <button id="aq" class="g">Aggiungi</button></div>
+ <div class="card"><b>Caricamento multiplo (solo risposta multipla)</b><div class="mu">Una per riga: domanda;A;B;C;D;numero corretta (1-4)</div><input id="bs" value="tutte" placeholder="Stanze per tutte le righe: tutte oppure 1,3-4"><textarea id="bulk" rows="5"></textarea><button id="ab" class="s">Importa</button></div>`+
+ qs.map(qCard).join('');
+function qCard(x,i){const t=x.type||'mc',ed=editId===x.id;
+ const det=t==='mc'?x.options.map((o,j)=>(j===x.correct?'✔ ':'')+esc(o)).join(' · ')+` — ${x.limit||20}s`:t==='open'?`Aperta — ${x.limit||20}s`:`Indizi: ${x.clues.length} × ${x.clueSecs||15}s`;
+ let h=`<div class="card"><b>${i+1}. ${esc(x.text)}</b>`;
+ if(ed){h+=`<input id="e_t" value="${esc(x.text)}">`;
+  if(t==='mc')h+=[0,1,2,3].map(j=>`<div class="row" style="align-items:center"><input id="e_o${j}" value="${esc((x.options||[])[j]||'')}" placeholder="Risposta ${'ABCD'[j]}"><label style="flex:0 0 auto"><input type="radio" name="ecr" value="${j}" ${x.correct===j?'checked':''} style="width:auto"> corretta</label></div>`).join('');
+  if(t==='clues')h+=`<div class="mu">Indizi (uno per riga) e secondi per indizio</div><textarea id="e_c" rows="4">${esc((x.clues||[]).join('\n'))}</textarea><input id="e_cs" type="number" min="3" value="${x.clueSecs||15}">`;
+  else h+=`<div class="mu">Secondi</div><input id="e_l" type="number" min="5" value="${x.limit||20}">`;
+  h+=`<div class="mu">Nota per l'host (non visibile ai guest)</div><input id="e_hn" value="${esc(x.hn||'')}"><div class="row"><button class="g" data-save="${x.id}">Salva</button><button class="s" id="ecan">Annulla</button></div>`}
+ else h+=`<div class="mu">${det}${x.pts?` · +${x.pts} pt`:''}${x.neg?` · −${x.neg} se sbagliata`:''}</div>`+(x.hn?`<div class="mu">📝 ${esc(x.hn)}</div>`:'');
+ return h+(t==='mc'?'':`<div class="mu">Risposte valide (una per riga):</div><textarea data-va="${x.id}" rows="3">${esc((x.answers||[]).join('\n'))}</textarea>`)+
+ `<div class="row"><div><div class="mu">Punti se esatta</div><input type="number" min="0" data-f="pts:${x.id}" value="${x.pts||''}" placeholder="auto"></div><div><div class="mu">Tolti se sbagliata</div><input type="number" min="0" data-f="neg:${x.id}" value="${x.neg||''}" placeholder="0"></div></div>`+(t==='clues'?'':`<label class="mu"><input type="checkbox" data-sp="${x.id}" ${x.sp===false?'':'checked'} style="width:auto"> Bonus velocità</label>`)+
+ `<div class="mu">Stanze:</div><input data-rs="${x.id}" value="${esc(x.rs!=null?(x.rs==='all'?'tutte':x.rs):'tutte')}" placeholder="Stanze: tutte oppure 1,3-4"><div class="row"><button class="s" data-mv="${x.id}:-1">▲</button><button class="s" data-mv="${x.id}:1">▼</button><button class="s" data-ed="${x.id}">✏️ Modifica</button><button class="s" data-del="${x.id}">Elimina</button></div></div>`}
+ let h=tabs+`<div class="card"><b>Nuova stanza di gioco</b><input id="rn" placeholder="Nome stanza (es. Tavolo 1)"><select id="ro"><option value="same">Stesso ordine per tutti</option><option value="random">Ordine casuale per ogni utente</option></select><button id="ar" class="g">Crea stanza</button></div>`+roomPick;
+ if(!R)return h+'<div class="card mu">Crea o seleziona una stanza.</div>';
+ const ph=R.phase,rq=roomQs(R),xa=R.ord==='random'?null:curQ(R),nq=R.ord==='random'?null:(ph==='question'?rq[R.idx]:ph==='reveal'?rq[R.idx+1]:rq[0]);
+ h+=`<div class="card"><b>#${R.num||'–'} ${esc(R.name)}</b> — ${PH[ph]} ${ph==='question'||ph==='reveal'?`· domanda ${R.idx+1}/${rq.length}`:''}
+ ${ph==='question'&&xa?`<div class="timer" id="tm">${Math.ceil(left(R,xa))}s</div>`:''}
+ ${cfg(R,ph)}
+ ${nq&&nq.hn?`<div class="mu" style="margin:6px 0">📝 ${ph==='question'?'Nota domanda in corso':'Nota prossima domanda'}: <b>${esc(nq.hn)}</b></div>`:''}
+ <div class="mu">Partecipanti: ${list.length}${ph==='question'||ph==='reveal'?` · Risposte: ${list.filter(p=>{const q=curQ(R,p);return q&&p.answers&&p.answers[q.id]}).length}`:''}</div>
+ <div class="row" style="margin-top:8px">
+ <button id="st" class="g" ${rq.length?'':'disabled'}>${ph==='lobby'||ph==='end'?'Avvia domanda 1':ph==='reveal'?'Prossima domanda':'Avvia'}</button>
+ <button id="rv" ${ph==='question'?'':'disabled'}>Mostra risposta</button>
+ <button id="en" class="s">Fine quiz</button>
+ <button id="rs" class="s">Riavvia stanza</button>
+ <button id="dr" class="s">Elimina stanza</button></div></div>
+ <div class="card"><b>Classifica live</b>${boardHtml(list,R)}</div>
+ <div class="card"><button id="all" class="s">Azzera tutti i partecipanti</button></div>`;
+ return h}
+
+function render(force){
+ const ae=document.activeElement;if(!force&&ae&&/INPUT|TEXTAREA/.test(ae.tagName)&&ae.type!=='radio')return;
+ if(!loaded){app.textContent='Caricamento…';return}
+ if(isAdmin&&!sel&&rooms.length)sel=rooms[0].id;
+ if(isAdmin&&sel&&!rooms.find(r=>r.id===sel))sel=rooms[0]?rooms[0].id:null;
+ app.className='';
+ const PR=isAdmin&&proj&&S();document.querySelector('main').className=PR?'wide proj':'';
+ let v;
+ if(PR)v=guestPreview(PR,players.filter(p=>p.room===PR.id),true);
+ else if(isAdmin)v=adminView();
+ else if(!me)v=startView();
+ else{const R=S();v=R?playerView(R):pickView()}
+ app.innerHTML=v;bind()}
+function bind(){
+ const on=(s,f)=>{const e=$(s);if(e)e.onclick=f},all=(s,f)=>app.querySelectorAll(s).forEach(b=>b.onclick=()=>f(b));
+ on('#go',register);on('#lv',leave);
+ on('#cr',()=>meRef.update({room:null,answers:{}}));
+ all('[data-r]',b=>meRef.update({room:b.dataset.r,answers:{}}));
+ all('[data-m]',b=>{nick=$('#nm').value;mode=b.dataset.m;err='';render()});
+ all('[data-c]',b=>answer(+b.dataset.c));
+ all('[data-t]',b=>{if(b.dataset.t==='x'){db.doc('admins/'+uid).delete().catch(()=>{});ls.set('qadm',null);isAdmin=false;tab='live';nick='';render();return}tab=b.dataset.t;render()});
+ all('[data-sel]',b=>{sel=b.dataset.sel;render()});
+ all('[data-del]',b=>db.doc('questions/'+b.dataset.del).delete());
+ on('#pj',()=>{if(!S())return alert('Crea o seleziona una stanza.');proj=true;try{document.documentElement.requestFullscreen()}catch(e){}render(true)});
+ on('#px',()=>{proj=false;try{if(document.fullscreenElement)document.exitFullscreen()}catch(e){}render(true)});
+ on('#dl1',()=>saveCsv(S()));on('#dl2',()=>saveCsv(null));
+ on('#ecan',()=>{editId=null;render(true)});
+ all('[data-ed]',b=>{editId=b.dataset.ed;render(true)});
+ all('[data-mv]',async b=>{const k=b.dataset.mv.lastIndexOf(':'),id=b.dataset.mv.slice(0,k),d=+b.dataset.mv.slice(k+1),ix=qs.findIndex(q=>q.id===id),o=qs[ix+d];if(!o)return;const a=qs[ix];await db.doc('questions/'+a.id).update({order:o.order});await db.doc('questions/'+o.id).update({order:a.order})});
+ all('[data-save]',async b=>{const x=qs.find(q=>q.id===b.dataset.save),t=x.type||'mc',u={text:$('#e_t').value.trim(),hn:$('#e_hn').value.trim()};if(!u.text)return alert('Scrivi la domanda.');
+  if(t==='mc'){const os=[0,1,2,3].map(j=>({v:$('#e_o'+j).value.trim(),j})).filter(o=>o.v),cr=+document.querySelector('input[name=ecr]:checked').value,ci=os.findIndex(o=>o.j===cr);if(os.length<2||ci<0)return alert('Servono almeno 2 risposte e la corretta deve essere compilata.');u.options=os.map(o=>o.v);u.correct=ci;u.limit=+$('#e_l').value||20}
+  else if(t==='open')u.limit=+$('#e_l').value||20;
+  else{const cl=$('#e_c').value.split('\n').map(z=>z.trim()).filter(Boolean);if(cl.length<2)return alert('Servono almeno 2 indizi.');u.clues=cl;u.clueSecs=+$('#e_cs').value||15}
+  await db.doc('questions/'+x.id).update(u);editId=null;render(true)});
+ all('[data-rn]',async b=>{const p=players.find(z=>z.id===b.dataset.rn),n=(prompt('Nuovo nome per '+p.name,p.name)||'').trim();if(!n||n===p.name)return;const kk=key(n);let d=null;try{const sn=await db.doc('names/'+kk).get();d=sn.data&&sn.data()}catch(e){}
+  if(d&&d.uid!==p.id&&Date.now()-d.seen<45000)return alert('Nome già in uso da un giocatore connesso.');
+  await db.doc('names/'+key(p.name)).delete().catch(()=>{});await db.doc('names/'+kk).set({uid:p.id,seen:Date.now(),name:n}).catch(()=>{});await db.doc('players/'+p.id).update({name:n})});
+ all('[data-kick]',async b=>{const p=players.find(z=>z.id===b.dataset.kick);if(!confirm('Rimuovere '+p.name+' dal quiz?'))return;await db.doc('names/'+key(p.name)).delete().catch(()=>{});await db.doc('players/'+p.id).delete()});
+ all('[data-th]',b=>db.doc('settings/theme').set({id:b.dataset.th,title:THEMES[b.dataset.th].t}));
+ on('#tts',()=>{const v=$('#tt').value.trim();if(v)db.doc('settings/theme').set({id:TH().id,title:v})});
+ on('#ttr',()=>db.doc('settings/theme').set({id:TH().id,title:THEMES[TH().id].t}));
+ const ch=(s,f)=>{const e=$(s);if(e)e.onchange=()=>f(e.value)};
+ ch('#ty',v=>{ft=v;render()});on('#sb',sendText);{const e=$('#ans');if(e)e.onkeydown=ev=>{if(ev.key==='Enter')sendText()}}
+ app.querySelectorAll('[data-f]').forEach(e=>e.onchange=()=>{const i=e.dataset.f.indexOf(':'),v=parseInt(e.value);db.doc('questions/'+e.dataset.f.slice(i+1)).update({[e.dataset.f.slice(0,i)]:v>0?v:0})});
+ app.querySelectorAll('[data-sp]').forEach(e=>e.onchange=()=>db.doc('questions/'+e.dataset.sp).update({sp:e.checked}));
+ app.querySelectorAll('[data-va]').forEach(e=>e.onchange=()=>{const v=e.value.split('\n').map(x=>x.trim()).filter(Boolean);if(v.length)db.doc('questions/'+e.dataset.va).update({answers:v})});
+ app.querySelectorAll('[data-rs]').forEach(e=>e.onchange=()=>{const v=normSpec(e.value);if(v==null){alert(BAD);return}db.doc('questions/'+e.dataset.rs).update({rs:v})});
+ ch('#od',v=>setRoom({ord:v}));
+ on('#ar',async()=>{const n=$('#rn').value.trim();if(!n)return;const r=await db.collection('rooms').add({name:n,createdAt:Date.now(),phase:'lobby',idx:0,startedAt:0,num:Math.max(0,...rooms.map(r=>r.num||0))+1,ord:$('#ro').value});sel=r.id;render()});
+ on('#aq',async()=>{const t=$('#qt').value.trim(),rs=normSpec($('#rs0').value),L=v=>v.split('\n').map(x=>x.trim()).filter(Boolean);
+  if(!t)return alert('Scrivi la domanda.');if(rs==null)return alert(BAD);
+  const pv=parseInt($('#pts').value),b={text:t,rs,type:ft};if(pv>0)b.pts=pv;{const hn=$('#hn').value.trim();if(hn)b.hn=hn}const nv=parseInt($('#neg').value);if(nv>0)b.neg=nv;if($('#sp')&&!$('#sp').checked)b.sp=false;
+  if(ft==='mc'){const o=[0,1,2,3].map(i=>$('#o'+i).value.trim()).filter(Boolean),c=+document.querySelector('input[name=cr]:checked').value;
+   if(o.length<2||c>=o.length)return alert('Servono almeno 2 risposte (la corretta deve esistere).');Object.assign(b,{options:o,correct:c,limit:+$('#ql').value||20})}
+  else{const va=L($('#va').value);if(!va.length)return alert('Inserisci almeno una risposta valida.');b.answers=va;
+   if(ft==='open')b.limit=+$('#ql').value||20;
+   else{const cl=L($('#cls').value);if(cl.length<2)return alert('Servono almeno 2 indizi.');b.clues=cl;b.clueSecs=+$('#cs').value||15}}
+  await addQ(b);render()});
+ on('#ab',async()=>{const bs=normSpec($('#bs').value);if(bs==null)return alert(BAD);for(const l of $('#bulk').value.split('\n')){const p=l.split(';').map(s=>s.trim());if(p.length<4)continue;
+  const n=+p[p.length-1],o=p.slice(1,-1).filter(Boolean);if(!p[0]||!n||n>o.length)continue;await addQ({text:p[0],options:o,correct:n-1,limit:20,rs:bs,type:'mc'})}$('#bulk').value=''});
+ on('#st',()=>{const R=S();const nx=(R.phase==='lobby'||R.phase==='end')?0:R.phase==='reveal'?R.idx+1:R.idx;
+  if(nx>=roomQs(R).length)return setRoom({phase:'end'});setRoom({phase:'question',idx:nx,startedAt:Date.now()})});
+ on('#rv',()=>setRoom({phase:'reveal'}));
+ on('#en',()=>setRoom({phase:'end'}));
+ on('#rs',async()=>{if(!confirm('Azzerare punteggi e ripartire da capo in questa stanza?'))return;
+  for(const p of players.filter(p=>p.room===sel))await db.doc('players/'+p.id).update({answers:{}});await setRoom({phase:'lobby',idx:0,startedAt:0})});
+ on('#dr',async()=>{if(!confirm('Eliminare la stanza? I giocatori dovranno sceglierne un\'altra.'))return;
+  for(const p of players.filter(p=>p.room===sel))await db.doc('players/'+p.id).update({room:null,answers:{}});await db.doc('rooms/'+sel).delete();sel=null});
+ on('#all',async()=>{if(!confirm('Cancellare tutti i partecipanti registrati?'))return;
+  for(const p of players){await db.doc('names/'+key(p.name)).delete().catch(()=>{});await db.doc('players/'+p.id).delete()}});
+}
+applyTheme();
+render();
+})();
+</script></body></html>
