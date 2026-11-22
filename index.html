@@ -37,9 +37,10 @@ main{position:relative;z-index:1}h1{text-align:center}
 main.wide{max-width:1200px}.proj h1{display:none}.proj h2{font-size:clamp(26px,5vw,60px)}
 .proj .opt{font-size:clamp(18px,3vw,36px);padding:16px}.proj .timer{font-size:clamp(40px,8vw,110px)}
 .proj table{font-size:clamp(16px,2.4vw,30px)}.proj .card{font-size:clamp(16px,2.4vw,28px)}
-.bz{display:block;margin:18px auto;width:min(70vw,300px);aspect-ratio:1;border-radius:50%;font-size:clamp(22px,7vw,44px);box-shadow:0 8px 0 color-mix(in srgb,var(--red) 55%,#000);touch-action:manipulation;user-select:none}
-.bz:active:not(:disabled){transform:translateY(6px);box-shadow:0 2px 0 color-mix(in srgb,var(--red) 55%,#000)}
-.bz:disabled{background:var(--mu);box-shadow:0 8px 0 color-mix(in srgb,var(--mu) 55%,#000);opacity:.7}
+
+.bz{display:block;margin:18px auto;width:min(70vw,300px);aspect-ratio:1;border-radius:50%;font-size:clamp(22px,7vw,44px);background:var(--bc,var(--red));box-shadow:0 8px 0 color-mix(in srgb,var(--bc,var(--red)) 55%,#000);touch-action:manipulation;user-select:none}
+.bz:active:not(:disabled){transform:translateY(6px);box-shadow:0 2px 0 color-mix(in srgb,var(--bc,var(--red)) 55%,#000)}
+.bz:disabled{opacity:.4}
 .bzname{font-size:clamp(26px,6vw,34px);font-weight:700;overflow-wrap:anywhere}.proj .bzname{font-size:clamp(34px,8vw,100px)}
 </style></head><body><div class="snow" id="snow"></div><main>
 <h1>❓ Quiz</h1>
@@ -66,7 +67,7 @@ dl=true;
 isAdmin=ls.get('qadm')==='1';
 if(isAdmin){try{const sn=await getDoc(fDoc(fdb,'admins/'+uid));if(!sn.exists())throw 0}catch(e){isAdmin=false;ls.set('qadm',null)}}
 const P=s=>s.docs?s.docs.map(d=>({id:d.id,...d.data()})):[];
-let ft='mc',endedKey='',loaded=false,mode='singolo',nick='',err='',tab='live',sel=null,now=Date.now(),rooms=[],qs=[],players=[],me=null,claimed=false,first=true,pv=100;
+let ft='mc',endedKey='',loaded=false,mode='singolo',nick='',err='',tab='live',sel=null,now=Date.now(),rooms=[],qs=[],players=[],me=null,claimed=false,first=true,pv=1,pEnd='';
 const key=n=>n.toLowerCase().replace(/[^a-z0-9]/g,'')||'x';
 const meRef=db.doc('players/'+uid);
 const S=()=>rooms.find(r=>r.id===(isAdmin?sel:(me&&me.room)));
@@ -92,7 +93,7 @@ db.collection('questions').orderBy('order').onSnapshot(s=>{qs=P(s);render()},()=
 db.collection('players').onSnapshot(s=>{players=P(s);me=players.find(p=>p.id===uid)||null;loaded=true;
  if(first){first=false;if(me&&!isAdmin)claim(me.name).then(ok=>{claimed=ok;if(!ok){err='Il nome "'+me.name+'" è già usato da un altro giocatore connesso.';meRef.delete().catch(()=>{})}render()});}
  render()},()=>{});
-setInterval(()=>{now=Date.now();const R=S();if(R&&R.phase==='question')tick()},500);
+setInterval(()=>{now=Date.now();const R=S();if(R&&R.phase==='question')tick();if(R&&R.kind==='pulsantone')ptick(R);if(isAdmin)padmin()},500);
 setInterval(()=>{if(me&&claimed&&!isAdmin)db.doc('names/'+key(me.name)).set({uid,seen:Date.now(),name:me.name}).catch(()=>{})},15000);
 document.addEventListener('focusout',()=>setTimeout(render,500));
 
@@ -113,9 +114,9 @@ function clueHtml(R,x,rev){const n=x.clues.length,cs=x.clueSecs||15,el=Math.max(
  return h}
 function score(p){let pts=0,ms=0,ok=0;qs.forEach(q=>{const a=p.answers&&p.answers[q.id];if(!a)return;if(okOf(q,a)){pts+=ptsOf(q,a);ms+=a.ms;ok++}else pts-=(q.neg||0)});return{pts,ms,ok}}
 const rank=list=>list.map(p=>({id:p.id,name:p.name+(p.mode==='gruppo'?' 👥':''),...score(p)})).sort((a,b)=>b.pts-a.pts||a.ms-b.ms);
-const pRank=(list,R)=>list.map(p=>{const c=(R&&R.sc&&R.sc[p.id])||{};return{id:p.id,name:p.name+(p.mode==='gruppo'?' 👥':''),pts:c.p||0,ms:0,ok:c.k||0}}).sort((a,b)=>b.pts-a.pts);
+const pRank=(list,R)=>list.map(p=>{const c=(R&&R.sc&&R.sc[p.id])||{};return{id:p.id,name:p.name+(p.mode==='gruppo'?' 👥':''),pts:c.p||0,ms:0,ok:c.k||0,er:c.e||0}}).sort((a,b)=>b.pts-a.pts);
 const rk=(list,R)=>R&&R.kind==='pulsantone'?pRank(list,R):rank(list);
-function pBoard(list,R){const b=pRank(list,R);if(!b.length)return '<p class="mu">Nessun partecipante.</p>';return '<div class="wrap"><table><tr><th>#</th><th>Nome</th><th>Punti</th><th>Giuste</th></tr>'+b.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td><td>${r.pts}</td><td>${r.ok}</td></tr>`).join('')+'</table></div>'}
+function pBoard(list,R){const b=pRank(list,R);if(!b.length)return '<p class="mu">Nessun partecipante.</p>';return '<div class="wrap"><table><tr><th>#</th><th>Nome</th><th>Punti</th><th>Giuste</th><th>Sbagl.</th></tr>'+b.map((r,i)=>`<tr><td>${i+1}</td><td>${dot(R,r.id)}${esc(r.name)}</td><td>${r.pts}</td><td>${r.ok}</td><td>${r.er}</td></tr>`).join('')+'</table></div>'}
 const tmOf=b=>b&&b.t&&b.t.toMillis?b.t.toMillis():9e15;
 const buzzers=R=>players.filter(p=>p.room===R.id&&p.answers&&p.answers.buzz&&p.answers.buzz.r===R.round).map(p=>({id:p.id,name:p.name+(p.mode==='gruppo'?' 👥':''),t:tmOf(p.answers.buzz)})).sort((a,b)=>a.t-b.t);
 function podiumHtml(list,R){const b=rk(list,R);if(!b.length)return '';const m=['🥇','🥈','🥉'],c=(i,k)=>b[i]?`<div class="${k}"><div style="font-size:28px">${m[i]}</div><b>${esc(b[i].name)}</b><span class="mu">${b[i].pts} pt</span></div>`:'';
@@ -142,7 +143,7 @@ function tick(){const R=S();if(!R||R.phase!=='question')return;const x=isAdmin?(
 function cfg(R,ph){const o=R.ord==='random'?'random':'same';
  if(ph!=='lobby')return `<div class="mu">Ordine: ${o==='random'?'casuale per ogni utente':'uguale per tutti'}</div>`;
  return `<select id="od"><option value="same" ${o==='same'?'selected':''}>Stesso ordine per tutti</option><option value="random" ${o==='random'?'selected':''}>Ordine casuale per ogni utente</option></select>`}
-const PH={lobby:'In attesa',question:'In corso',reveal:'In corso',end:'Terminata'};
+const PH={play:'In corso',lobby:'In attesa',question:'In corso',reveal:'In corso',end:'Terminata'};
 
 async function answer(c){const R=S(),x=R&&curQ(R,me);if(!x||R.phase!=='question'||(me.answers&&me.answers[x.id]))return;
  const ms=Math.max(0,Date.now()-R.startedAt);if(ms>((x.limit||20)*1000+1500))return;
@@ -160,7 +161,20 @@ async function register(){const n=$('#nm').value.trim();if(!n)return;
  err='';claimed=true;try{await meRef.set({name:n,mode,room:null,answers:{}})}catch(e){err='Impossibile registrarti: serve accesso Contributor.';render()}}
 async function leave(){if(me)await db.doc('names/'+key(me.name)).delete().catch(()=>{});await meRef.delete().catch(()=>{});claimed=false;nick='';render()}
 
-async function buzz(){const R=S();if(!R||R.kind!=='pulsantone'||!R.open||!me)return;if((R.excl||[]).includes(uid)||buzzers(R).length)return;
+const PAL=['#e03131','#1c7ed6','#2f9e44','#f08c00','#9c36b5','#0ca678','#d6336c','#495057','#5f3dc4','#e8590c','#1098ad','#66a80f','#a61e4d','#364fc7','#862e9c','#8d5524'];
+const colAt=i=>i<PAL.length?PAL[i]:'hsl('+(i*47%360)+',65%,42%)';
+const colOf=(R,id)=>{const i=(R.col||{})[id];return i==null?null:colAt(i)};
+const dot=(R,id)=>{const c=R&&colOf(R,id);return c?`<span style="color:${c}">●</span> `:''};
+const remaining=R=>R.tstart?Math.max(0,(R.tleft||0)-(now-R.tstart)):(R.tleft||0);
+const fmtT=ms=>{const t=Math.ceil(ms/1000);return Math.floor(t/60)+':'+String(t%60).padStart(2,'0')};
+const pq=R=>roomQs(R)[R.idx];
+const pscore=(R,id)=>(R.sc&&R.sc[id])||{p:0,k:0,e:0};
+const elig=(R,id)=>(R.retry||'subito')==='subito'||!(R.wrong||[]).includes(id);
+const expired=R=>(R.tmode||'none')!=='none'&&remaining(R)<=0;
+const ansOf=x=>(!x.type||x.type==='mc')?(x.options||[])[x.correct]:(x.answers||[])[0]||'';
+const RT={subito:'Dopo un errore può ripremere subito',tutti:'Dopo un errore attende che tutti abbiano sbagliato',mai:'Dopo un errore non può più prenotarsi'};
+
+async function buzz(){const R=S();if(!R||R.kind!=='pulsantone'||R.phase!=='play'||R.st!=='open'||!me)return;if(!elig(R,uid)||buzzers(R).length||expired(R))return;
  const b=me.answers&&me.answers.buzz;if(b&&b.r===R.round)return;
  try{await meRef.update({answers:{...(me.answers||{}),buzz:{r:R.round,t:serverTimestamp()}}})}catch(e){alert('Prenotazione non registrata.')}}
 function isFull(r,m){if(r.kind!=='pulsantone')return false;const g=m==='gruppo',n=players.filter(p=>p.room===r.id&&(p.mode==='gruppo')===g).length,mx=g?r.maxGroups:r.maxSingles;return mx>0&&n>=mx}
@@ -168,29 +182,67 @@ function capTxt(r){const s=players.filter(p=>p.room===r.id&&p.mode!=='gruppo').l
 function roomCard(r){const pu=r.kind==='pulsantone',full=isFull(r,me.mode);
  return `<div class="card"><b>${pu?'🔴 ':''}${esc(r.name)}</b><div class="mu">${PH[r.phase]||''} · ${pu?capTxt(r):players.filter(p=>p.room===r.id).length+' partecipanti'}</div><button data-r="${r.id}" ${(r.phase==='end'||full)?'disabled':''} style="width:100%;margin-top:8px">${full?'Al completo':'Entra'}</button></div>`}
 function pulsNew(){return `<div class="card"><b>🔴 Nuova stanza Pulsantone</b><div class="mu">Un pulsante gigante: chi preme per primo risponde. Lascia vuoti i limiti per non porre restrizioni.</div><input id="pn" maxlength="40" placeholder="Nome stanza (es. Pulsantone finale)"><div class="row"><div><div class="mu">Max giocatori singoli</div><input id="pms" type="number" min="1" placeholder="illimitati"></div><div><div class="mu">Max gruppi</div><input id="pmg" type="number" min="1" placeholder="illimitati"></div></div><button id="pa0" class="g" style="width:100%;margin-top:6px">Crea Pulsantone</button></div>`}
-function orderHtml(bz){return bz.length>1?'<div class="card"><b>Ordine di prenotazione</b>'+bz.map((b,i)=>`<div>${i+1}. ${esc(b.name)}</div>`).join('')+'</div>':''}
+function orderHtml(R,bz){return bz.length>1?'<div class="card"><b>Ordine di prenotazione</b>'+bz.map((b,i)=>`<div>${i+1}. ${dot(R,b.id)}${esc(b.name)}</div>`).join('')+'</div>':''}
+function statBox(R,id){const c=pscore(R,id),b=v=>`<b style="font-size:26px">${v}</b>`;return `<div class="row" style="text-align:center"><div class="card"><div class="mu">✅ Giuste</div>${b(c.k||0)}</div><div class="card"><div class="mu">❌ Sbagliate</div>${b(c.e||0)}</div><div class="card"><div class="mu">⭐ Punteggio</div>${b(c.p||0)}</div></div>`}
+function qHtml(R,adm){const rq=roomQs(R),x=rq[R.idx];return `<div class="mu">Domanda ${R.idx+1}${rq.length?' di '+rq.length:''}</div>`+(x?`<h2 style="margin:4px 0">${esc(x.text)}</h2>`:'')+(adm&&x?`<div class="mu">Risposta: <b>${esc(ansOf(x))}</b></div>${x.hn?`<div class="mu">📝 ${esc(x.hn)}</div>`:''}`:'')}
+function tHtml(R){return (R.tmode||'none')!=='none'?`<div class="timer" id="ptm">${fmtT(remaining(R))}</div>`:''}
+function winHtml(R,w){return `<div class="mu">Si è prenotato</div><div class="bzname" style="color:${colOf(R,w.id)||'inherit'}">🔴 ${esc(w.name)}</div>`}
 function pulsPlayer(R,list){
- if(R.phase==='end')return podiumHtml(list,R)+'<div class="card"><b>Classifica finale</b>'+pBoard(list,R)+'</div>';
- const bz=buzzers(R),w=bz[0],ex=(R.excl||[]).includes(uid),can=R.open&&!w&&!ex;
- const msg=ex?'Hai sbagliato: aspetta la prossima domanda.':w?(w.id===uid?'🎉 Hai premuto per primo!':'⚡ '+esc(w.name)+' ha premuto per primo'):R.open?'Premi appena sai la risposta!':'Aspetta che l\'host apra il pulsante…';
- return `<div class="card" style="text-align:center"><button class="bz" id="bz" ${can?'':'disabled'}>${can?'PREMI!':ex?'✋':'…'}</button><p><b>${msg}</b></p></div>`+orderHtml(bz)+'<div class="card"><b>Classifica</b>'+pBoard(list,R)+'</div>'}
+ if(R.phase==='end')return podiumHtml(list,R)+statBox(R,uid)+'<div class="card"><b>Classifica finale</b>'+pBoard(list,R)+'</div>';
+ const pl=R.phase==='play',bz=pl?buzzers(R):[],w=bz[0],el=elig(R,uid),exp=pl&&expired(R);
+ const can=pl&&R.st==='open'&&!w&&el&&!exp,c=colOf(R,uid);let msg;
+ if(!pl)msg='Aspetta che l\'host avvii il gioco…';
+ else if(R.st==='timeout'||exp)msg='⏱ Tempo scaduto';
+ else if(R.st==='exhausted')msg='Hanno sbagliato tutti: si passa avanti';
+ else if(w)msg=w.id===uid?'🎉 Ti sei prenotato! Aspetta il verdetto…':'⚡ '+esc(w.name)+' si è prenotato';
+ else if(!el)msg=R.retry==='mai'?'Hai sbagliato: su questa domanda non puoi più prenotarti.':'Hai sbagliato: aspetta che tutti abbiano sbagliato.';
+ else msg='Premi appena sai la risposta!';
+ return `<div class="card" style="text-align:center">${pl?qHtml(R,false)+tHtml(R):''}<button class="bz" id="bz" style="${c?'--bc:'+c:''}" ${can?'':'disabled'}>${can?'PREMI!':c?'🔴':'…'}</button><p><b>${msg}</b></p></div>`+statBox(R,uid)+'<div class="card"><b>Classifica</b>'+pBoard(list,R)+'</div>'}
 function pulsGuest(R,list,big){
  let h=big?`<div class="row" style="align-items:center"><div class="mu">${TH().e} ${esc(TH().title)} · ${esc(R.name)}</div><button class="s" id="px" style="flex:0 0 auto">✕ Chiudi</button></div>`:`<div class="card"><b>Anteprima: cosa vedono i guest</b><div class="mu">Pulsantone #${R.num||'–'} ${esc(R.name)}</div></div>`;
  if(R.phase==='end')return h+podiumHtml(list,R)+'<div class="card"><b>Classifica finale</b>'+pBoard(list,R)+'</div>';
+ if(R.phase!=='play')return h+`<div class="card" style="text-align:center"><div class="bzname">In attesa…</div>${big?`<div class="mu">Scegli la stanza <b>${esc(R.name)}</b> per entrare</div>`:''}</div><div class="card"><b>In stanza (${list.length})</b><div>${list.map(p=>dot(R,p.id)+esc(p.name)).join(' · ')||'—'}</div></div>`;
  const bz=buzzers(R),w=bz[0];
- h+=w?`<div class="card" style="text-align:center"><div class="mu">Ha premuto per primo</div><div class="bzname">🔴 ${esc(w.name)}</div></div>`
-  :`<div class="card" style="text-align:center"><div class="bzname">${R.open?'🔴 Pulsante aperto!':(R.round?'Pulsante chiuso':'In attesa…')}</div>${big&&!R.round?`<div class="mu">Scegli la stanza <b>${esc(R.name)}</b> per entrare</div>`:''}</div>`;
- return h+orderHtml(bz)+`<div class="card"><b>In stanza (${list.length})</b><div>${list.map(p=>esc(p.name)).join(' · ')||'—'}</div></div><div class="card"><b>Classifica</b>`+pBoard(list,R)+'</div>'}
+ h+=`<div class="card" style="text-align:center">${qHtml(R,false)}${tHtml(R)}`+(w?winHtml(R,w):(R.st==='timeout'||expired(R))?'<div class="bzname">⏱ Tempo scaduto</div>':R.st==='exhausted'?'<div class="bzname">Hanno sbagliato tutti</div>':'<div class="bzname">🔴 Pulsanti aperti!</div>')+'</div>';
+ return h+orderHtml(R,bz)+'<div class="card"><b>Classifica</b>'+pBoard(list,R)+'</div>'}
 function pulsAdmin(R,list){
- const bz=buzzers(R),ph=R.phase,ex=(R.excl||[]).length;
- let h=`<div class="card"><b>🔴 #${R.num||'–'} ${esc(R.name)}</b> — Pulsantone · ${ph==='end'?'Terminata':R.open?'pulsante APERTO':'pulsante chiuso'}${R.round?' · giro '+R.round:''}
- <div class="mu">${capTxt(R)}</div>${ex?`<div class="mu">Esclusi in questa domanda: ${ex}</div>`:''}
- <div class="row" style="margin-top:8px"><button id="pbo" class="g">${R.round?'Nuova domanda (apri pulsante)':'Apri pulsante'}</button><button id="pbc" ${R.open?'':'disabled'}>Chiudi pulsante</button></div>
- <div class="row" style="margin-top:8px"><button id="en" class="s">Fine quiz</button><button id="rs" class="s">Riavvia stanza</button><button id="dr" class="s">Elimina stanza</button></div></div>`;
- h+=`<div class="card"><b>Punti per risposta</b><select id="pp">${[0,1,5,10,20,50,100,200,500,1000].map(v=>`<option value="${v}" ${v===pv?'selected':''}>${v}</option>`).join('')}</select><div class="mu">✅ assegna i punti a chi ha premuto · ❌ li toglie, esclude quel giocatore e riapre il pulsante agli altri.</div></div>`;
- if(bz.length)h+='<div class="card"><b>Hanno premuto</b>'+bz.map((b,i)=>`<div class="row" style="align-items:center;margin:6px 0"><div><b>${i+1}. ${esc(b.name)}</b></div><button class="g" data-aw="${b.id}:1">✅ +${pv}</button><button class="s" data-aw="${b.id}:-1">❌ −${pv}</button></div>`).join('')+'</div>';
- else if(R.open)h+='<div class="card mu">Nessuno ha ancora premuto…</div>';
- return h+'<div class="card"><b>Classifica live</b>'+pBoard(list,R)+'</div>'}
+ const ph=R.phase,rq=roomQs(R),bz=ph==='play'?buzzers(R):[],w=bz[0],rt=R.retry||'subito',tm=R.tmode||'none';
+ let h=`<div class="card"><b>🔴 #${R.num||'–'} ${esc(R.name)}</b> — Pulsantone · ${ph==='lobby'?'In attesa':ph==='end'?'Terminata':'In corso'}<div class="mu">${capTxt(R)}</div><div class="mu">In stanza: ${list.map(p=>dot(R,p.id)+esc(p.name)).join(' · ')||'—'}</div>
+ <div class="row" style="margin-top:8px"><button id="en" class="s">Concludi gioco</button><button id="rs" class="s">Riavvia stanza</button><button id="dr" class="s">Elimina stanza</button></div></div>`;
+ if(ph==='lobby')h+=`<div class="card"><b>Impostazioni</b><div class="mu">Dopo una risposta sbagliata</div><select id="prt">${Object.entries(RT).map(([k,v])=>`<option value="${k}" ${k===rt?'selected':''}>${v}</option>`).join('')}</select><div class="mu" style="margin-top:8px">Timer</div><select id="ptmode"><option value="none" ${tm==='none'?'selected':''}>Nessun timer</option><option value="question" ${tm==='question'?'selected':''}>Un timer per ogni domanda</option><option value="total" ${tm==='total'?'selected':''}>Un unico timer per tutte le domande</option></select>${tm!=='none'?`<div class="mu">${tm==='total'?'Secondi totali':'Secondi per domanda'}</div><input id="ptsec" type="number" min="5" value="${R.tsecs||30}">`:''}<div class="mu" style="margin-top:8px">Domande collegate a questa stanza: ${rq.length||'nessuna (gioco libero, numerazione senza testo)'}</div><button id="pgo" class="g" style="width:100%;margin-top:8px">▶ Avvia gioco</button></div>`;
+ if(ph==='play'){const last=rq.length&&R.idx+1>=rq.length,wr=(R.wrong||[]).map(id=>{const p=players.find(z=>z.id===id);return p?esc(p.name):''}).filter(Boolean).join(', ');
+  h+=`<div class="card">${qHtml(R,true)}${tHtml(R)}<div class="mu">${RT[rt]}${wr?' · hanno sbagliato: '+wr:''}</div>`
+  +(w?`<div class="card" style="text-align:center;margin:10px 0">${winHtml(R,w)}<div class="row" style="margin-top:8px"><button id="pbok" class="g">✅ Giusta</button><button id="pbko">❌ Sbagliata</button></div></div>`:(R.st==='timeout'||expired(R))?'<div class="mu"><b>⏱ Tempo scaduto</b></div>':R.st==='exhausted'?'<div class="mu"><b>Hanno sbagliato tutti</b></div>':'<div class="mu"><b>Pulsanti aperti…</b> nessuno ha ancora premuto</div>')
+  +`<div class="row" style="margin-top:8px"><button id="pbn" class="s">${last?'Salta e concludi':'Salta / prossima domanda'}</button></div></div>`
+  +`<div class="card"><b>Punti se la domanda non li specifica</b><select id="pp">${[1,5,10,20,50,100,200,500,1000].map(v=>`<option value="${v}" ${v===pv?'selected':''}>${v}</option>`).join('')}</select></div>`+orderHtml(R,bz)}
+ if(ph==='end')h+=podiumHtml(list,R)+'<div class="card"><b>Classifica finale</b>'+pBoard(list,R)+'<div style="margin-top:8px"><button id="dl1" class="g">⬇ CSV classifica</button></div></div>';
+ else h+='<div class="card"><b>Classifica live</b>'+pBoard(list,R)+'</div>';
+ return h}
+function pmark(ok){const R=S(),w=R&&buzzers(R)[0];if(!w)return;const x=pq(R),sc={...(R.sc||{})},c={p:0,k:0,e:0,...(sc[w.id]||{})};
+ if(ok){c.p+=(x&&x.pts)||pv;c.k++;sc[w.id]=c;return padv(R,{sc})}
+ c.e++;c.p-=(x&&x.neg)||0;sc[w.id]=c;
+ const rt=R.retry||'subito',wr0=[...(R.wrong||[]),w.id],all=players.filter(p=>p.room===R.id),allW=all.length>0&&all.every(p=>wr0.includes(p.id));
+ const u={sc,round:(R.round||0)+1,wrong:(rt==='tutti'&&allW)?[]:wr0,tleft:remaining(R)};
+ if(rt==='mai'&&allW){u.st='exhausted';u.tstart=0}else{u.st='open';u.tstart=(R.tmode||'none')==='none'?0:Date.now()}
+ setRoom(u)}
+function padv(R,extra){const rq=roomQs(R),n=R.idx+1,tm=R.tmode||'none';
+ if(rq.length&&n>=rq.length)return setRoom({...extra,phase:'end',st:'done',tstart:0,tleft:remaining(R)});
+ const u={...extra,idx:n,round:(R.round||0)+1,st:'open',wrong:[]};
+ if(tm==='question'){u.tleft=(R.tsecs||30)*1000;u.tstart=Date.now()}
+ else if(tm==='total'){u.tleft=remaining(R);u.tstart=Date.now()}
+ else{u.tleft=0;u.tstart=0}
+ return setRoom(u)}
+function ptick(R){const t=$('#ptm');if(t)t.textContent=fmtT(remaining(R));
+ if(R.phase==='play'){const k=R.id+'|'+R.round+'|'+R.st+'|'+expired(R);if(k!==pEnd){pEnd=k;if(expired(R))render(true)}}}
+const pk={};
+function padmin(){rooms.filter(r=>r.kind==='pulsantone').forEach(r=>{
+ const ref=db.doc('rooms/'+r.id),col={...(r.col||{})},used=new Set(Object.values(col));let chg=false;
+ players.filter(p=>p.room===r.id&&col[p.id]==null).forEach(p=>{let i=0;while(used.has(i))i++;col[p.id]=i;used.add(i);chg=true});
+ if(chg){const k=r.id+'|c|'+Object.keys(col).length;if(!pk[k]){pk[k]=1;ref.update({col}).catch(()=>{})}}
+ if(r.phase!=='play'||r.st!=='open')return;
+ const key=r.id+'|'+r.round+'|'+r.idx;
+ if(buzzers(r).length){if(pk[key]!=='h'){pk[key]='h';ref.update({st:'held',tleft:remaining(r),tstart:0}).catch(()=>{})}return}
+ if(expired(r)&&pk[key]!=='t'){pk[key]='t';ref.update(r.tmode==='total'?{phase:'end',st:'timeout',tstart:0,tleft:0}:{st:'timeout',tstart:0,tleft:0}).catch(()=>{})}})}
 function startView(){return `<div class="card"><b>Come vuoi giocare?</b><div class="tabs"><button data-m="singolo" class="${mode==='singolo'?'on':''}">👤 Singolo</button><button data-m="gruppo" class="${mode==='gruppo'?'on':''}">👥 Gruppo</button></div><input id="nm" maxlength="24" value="${esc(nick)}" placeholder="${mode==='singolo'?'Il tuo nick':'Nome della squadra'}">${err?`<p style="color:var(--red)">${esc(err)}</p>`:''}<button id="go" style="width:100%;margin-top:6px">Continua</button></div>`}
 function pickView(){return `<div class="card row" style="align-items:center"><div><b>${esc(me.name)}</b>${me.mode==='gruppo'?' 👥':''}<div class="mu">Scegli la stanza di gioco</div></div><button class="s" id="lv" style="flex:0 0 auto">Esci</button></div>`+
  (rooms.length?rooms.map(roomCard).join(''):'<div class="card mu">Nessuna stanza disponibile: aspetta che l\'host ne crei una.</div>')}
@@ -358,19 +410,17 @@ function bind(){
  on('#rv',()=>setRoom({phase:'reveal'}));
  on('#en',()=>setRoom({phase:'end'}));
  on('#rs',async()=>{if(!confirm('Azzerare punteggi e ripartire da capo in questa stanza?'))return;
-  for(const p of players.filter(p=>p.room===sel))await db.doc('players/'+p.id).update({answers:{}});await setRoom({phase:'lobby',idx:0,startedAt:0,...(S()&&S().kind==='pulsantone'?{round:0,open:false,excl:[],sc:{}}:{})})});
+  for(const p of players.filter(p=>p.room===sel))await db.doc('players/'+p.id).update({answers:{}});await setRoom({phase:'lobby',idx:0,startedAt:0,...(S()&&S().kind==='pulsantone'?{round:0,st:'open',wrong:[],tleft:0,tstart:0,sc:{}}:{})})});
  on('#dr',async()=>{if(!confirm('Eliminare la stanza? I giocatori dovranno sceglierne un\'altra.'))return;
   for(const p of players.filter(p=>p.room===sel))await db.doc('players/'+p.id).update({room:null,answers:{}});await db.doc('rooms/'+sel).delete();sel=null});
  on('#all',async()=>{if(!confirm('Cancellare tutti i partecipanti registrati?'))return;
   for(const p of players){await db.doc('names/'+key(p.name)).delete().catch(()=>{});await db.doc('players/'+p.id).delete()}});
  {const e=$('#bz');if(e)e.onpointerdown=ev=>{ev.preventDefault();buzz()}}
- ch('#pp',v=>{pv=+v});
+ ch('#pp',v=>{pv=+v});ch('#prt',v=>setRoom({retry:v}));ch('#ptmode',v=>setRoom({tmode:v}));ch('#ptsec',v=>{const n=parseInt(v);setRoom({tsecs:n>=5?n:30})});
  on('#pa0',async()=>{const n=$('#pn').value.trim();if(!n)return alert('Scrivi il nome della stanza.');const a=parseInt($('#pms').value),g=parseInt($('#pmg').value);
-  const r=await db.collection('rooms').add({name:n,createdAt:Date.now(),phase:'lobby',idx:0,startedAt:0,num:Math.max(0,...rooms.map(r=>r.num||0))+1,ord:'same',kind:'pulsantone',maxSingles:a>0?a:0,maxGroups:g>0?g:0,round:0,open:false,excl:[],sc:{}});sel=r.id;render(true)});
- on('#pbo',()=>{const R=S();setRoom({open:true,round:(R.round||0)+1,excl:[],phase:'lobby'})});
- on('#pbc',()=>setRoom({open:false}));
- all('[data-aw]',b=>{const R=S(),[id,sg]=b.dataset.aw.split(':'),g=+sg,sc={...(R.sc||{})},c=sc[id]||{p:0,k:0};sc[id]={p:c.p+g*pv,k:c.k+(g>0?1:0)};
-  const u={sc};if(g<0){u.excl=[...(R.excl||[]),id];u.round=(R.round||0)+1;u.open=true}else u.open=false;setRoom(u)});
+  const r=await db.collection('rooms').add({name:n,createdAt:Date.now(),phase:'lobby',idx:0,startedAt:0,num:Math.max(0,...rooms.map(r=>r.num||0))+1,ord:'same',kind:'pulsantone',maxSingles:a>0?a:0,maxGroups:g>0?g:0,round:0,st:'open',wrong:[],tleft:0,tstart:0,retry:'subito',tmode:'none',tsecs:30,col:{},sc:{}});sel=r.id;render(true)});
+ on('#pgo',()=>{const R=S(),tm=R.tmode||'none';setRoom({phase:'play',idx:0,round:(R.round||0)+1,st:'open',wrong:[],tleft:tm==='none'?0:(R.tsecs||30)*1000,tstart:tm==='none'?0:Date.now()})});
+ on('#pbok',()=>pmark(true));on('#pbko',()=>pmark(false));on('#pbn',()=>padv(S(),{}));
 }
 applyTheme();
 render();
